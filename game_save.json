@@ -1,0 +1,61 @@
+{
+  "name": "Eclypso Campaign",
+  "characters": {
+    "2f3d9f8e-8f7a-4b1c-9a0d-1e2f3a4b5c6d": {
+      "name": "Eclypso",
+      "player_name": null,
+      "char_id": "2f3d9f8e-8f7a-4b1c-9a0d-1e2f3a4b5c6d",
+      "level": 5,
+      "race": "High elf",
+      "char_class": "Fighter",
+      "max_hp": 51,
+      "current_hp": 51,
+      "temp_hp": 0,
+      "hit_die": 10,
+      "hit_die_total": 5,
+      "armor_class": 13,
+      "speed": 30,
+      "abilities": {
+        "STR": 10,
+        "DEX": 15,
+        "CON": 14,
+        "INT": 13,
+        "WIS": 12,
+        "CHA": 8
+      },
+      "saves_proficiency": {
+        "STR": true,
+        "DEX": false,
+        "CON": true,
+        "INT": false,
+        "WIS": false,
+        "CHA": false
+      },
+      "skill_proficiency": {
+        "survival": true,
+        "athletics": true
+      },
+      "inspiration": false,
+      "conditions": {},
+      "inventory": [
+        { "name": "Leather armor", "description": "", "quantity": 1, "consumable": false, "weight": 10.0, "properties": {} },
+        { "name": "Longbow", "description": "", "quantity": 1, "consumable": false, "weight": 2.0, "properties": {} },
+        { "name": "Arrow", "description": "20 arrows", "quantity": 20, "consumable": true, "weight": 0.05, "properties": {} },
+        { "name": "Rapier", "description": "", "quantity": 1, "consumable": false, "weight": 2.5, "properties": {} },
+        { "name": "Shortsword", "description": "", "quantity": 1, "consumable": false, "weight": 2.0, "properties": {} },
+        { "name": "Light crossbow", "description": "", "quantity": 1, "consumable": false, "weight": 3.5, "properties": {} },
+        { "name": "Crossbow bolt", "description": "20 bolts", "quantity": 20, "consumable": true, "weight": 0.06, "properties": {} },
+        { "name": "Dungeoneer's pack", "description": "", "quantity": 1, "consumable": false, "weight": 10.0, "properties": {} },
+        { "name": "Fighting Style: Archery", "description": "Archery fighting style", "quantity": 1, "consumable": false, "weight": 0.0, "properties": {} }
+      ],
+      "spells": [],
+      "spell_slots": {},
+      "concentration": null,
+      "xp": 6500,
+      "gender": "male",
+      "alignment": "Neutral Good"
+    }
+  },
+  "encounters": {},
+  "party": []
+}
