@@ -2,28 +2,46 @@ import json
 import math
 import uuid
 import random
-import tkinter as tk
-from tkinter import ttk, messagebox, simpledialog
 import os
 from dataclasses import dataclass, field, asdict
 from typing import Dict, List, Optional, Any, Tuple
+from kivy.app import App
+from kivy.uix.boxlayout import BoxLayout
+from kivy.uix.gridlayout import GridLayout
+from kivy.uix.stacklayout import StackLayout
+from kivy.uix.scrollview import ScrollView
+from kivy.uix.label import Label
+from kivy.uix.textinput import TextInput
+from kivy.uix.button import Button
+from kivy.uix.togglebutton import ToggleButton
+from kivy.uix.checkbox import CheckBox
+from kivy.uix.spinner import Spinner
+from kivy.uix.popup import Popup
+from kivy.uix.tabbedpanel import TabbedPanel, TabbedPanelItem
+from kivy.uix.modalview import ModalView
+from kivy.uix.carousel import Carousel
+from kivy.core.window import Window
+from kivy.properties import StringProperty, NumericProperty, BooleanProperty, ListProperty, DictProperty, ObjectProperty
+from kivy.clock import Clock
+from kivy.config import Config
 
+# API and core functionality (unchanged from original)
 API_BASE = "https://www.dnd5eapi.co"
 API_TIMEOUT = 5  # seconds
 
 HAVE_REQUESTS = False
 try:
-    import requests  # type: ignore
-    from requests.exceptions import RequestException  # type: ignore
+    import requests
+    from requests.exceptions import RequestException
     HAVE_REQUESTS = True
 except Exception:
-    requests = None  # type: ignore
-    RequestException = Exception  # type: ignore
+    requests = None
+    RequestException = Exception
 
 import urllib.request
 import urllib.error
 
-SESSION = requests.Session() if HAVE_REQUESTS else None # type: ignore
+SESSION = requests.Session() if HAVE_REQUESTS else None
 
 def api_get(url: str):
     if HAVE_REQUESTS and SESSION is not None:
@@ -51,7 +69,6 @@ def api_get(url: str):
     except Exception as e:
         raise RequestException(e)
 
-
 def ability_mod(score: int) -> int:
     return (score - 10) // 2
 
@@ -67,9 +84,9 @@ CONDITIONS = {
     "poisoned", "prone", "restrained", "stunned", "unconscious"
 }
 
-SPELL_INDEX: Dict[str, str] = {}      # maps normalized name -> api index
-CLASS_INDEX: Dict[str, str] = {}      # maps class name lower -> index
-SPELL_LIBRARY: Dict[str, "Spell"] = {}  # cached detailed Spell objects
+SPELL_INDEX: Dict[str, str] = {}
+CLASS_INDEX: Dict[str, str] = {}
+SPELL_LIBRARY: Dict[str, "Spell"] = {}
 
 @dataclass
 class Item:
@@ -98,10 +115,10 @@ class Spell:
     components: Dict[str, bool] = field(default_factory=lambda: {"V": True, "S": True, "M": False})
     concentration: bool = False
     description: str = ""
-    damage_expr: Optional[str] = None     # e.g. "8d6"
-    damage_type: Optional[str] = None     # e.g. "fire"
-    save: Optional[str] = None            # e.g. "DEX" or "CON"
-    save_half: bool = False               # whether successful save halves damage
+    damage_expr: Optional[str] = None
+    damage_type: Optional[str] = None
+    save: Optional[str] = None
+    save_half: bool = False
 
 def normalize_key(s: str) -> str:
     return s.strip().lower().replace(" ", "-").replace("'", "").replace(",", "")
@@ -159,15 +176,14 @@ def fetch_spell_details_from_api(index: str) -> Optional[Spell]:
         material = data.get("material")
         if material:
             desc_text = (desc_text + f"\n\nMaterial: {material}").strip()
-        # damage: try to extract a damage expression from damage_at_slot_level or damage_at_character_level
         damage_expr = None
         damage_type = None
-        dmg = data.get("damage")
-        if isinstance(dmg, dict):
-            dt = dmg.get("damage_type")
+        Expandedg = data.get("damage")
+        if isinstance(Expandedg, dict):
+            dt = Expandedg.get("damage_type")
             if isinstance(dt, dict):
                 damage_type = dt.get("name")
-            dal = dmg.get("damage_at_slot_level") or dmg.get("damage_at_character_level")
+            dal = Expandedg.get("damage_at_slot_level") or Expandedg.get("damage_at_character_level")
             if isinstance(dal, dict):
                 key = str(level) if str(level) in dal else next(iter(dal.keys()), None)
                 if key:
@@ -177,7 +193,7 @@ def fetch_spell_details_from_api(index: str) -> Optional[Spell]:
         if isinstance(dc, dict):
             dc_type = dc.get("dc_type")
             if isinstance(dc_type, dict):
-                name = dc_type.get("name", "")  # e.g. "Constitution"
+                name = dc_type.get("name", "")
                 save = name[:3].upper() if name else None
         save_half = "half" in desc_text.lower()
         sp = Spell(
@@ -202,10 +218,6 @@ def fetch_spell_details_from_api(index: str) -> Optional[Spell]:
         return None
 
 def get_spell_by_name(name: str) -> Optional[Spell]:
-    """
-    Lookup a spell by name, using local cache first, then API (lazy).
-    Normalizes name and supports space/hyphen variants.
-    """
     if not name:
         return None
     key = name.strip().lower()
@@ -391,7 +403,8 @@ class Character:
             mod += self.prof_bonus()
         return mod
 
-    def apply_damage(self, amount: int, damage_round: Optional[int] = None, con_save_roll: Optional[int] = None) -> Dict[str, Any]:
+    def apply_damage(self, amount: int, damage_round: Optional[int] = None, 
+                     con_save_roll: Optional[int] = None) -> Dict[str, Any]:
         remaining = amount
         if self.temp_hp > 0:
             used = min(self.temp_hp, remaining)
@@ -404,7 +417,8 @@ class Character:
             if con_save_roll is not None and con_save_roll < dc:
                 concentration_broken = True
                 self.concentration = None
-        return {"current_hp": self.current_hp, "temp_hp": self.temp_hp, "concentration_broken": concentration_broken}
+        return {"current_hp": self.current_hp, "temp_hp": self.temp_hp, 
+                "concentration_broken": concentration_broken}
 
     def heal(self, amount: int) -> Dict[str, Any]:
         self.current_hp = min(self.max_hp, self.current_hp + amount)
@@ -456,7 +470,8 @@ class Character:
         slot["current"] -= 1
         return True
 
-    def cast_spell(self, spell_name: str, encounter: "CombatEncounter", targets: List[str], slot_level: Optional[int] = None, caster_ability: str = "INT") -> Dict[str, Any]:
+    def cast_spell(self, spell_name: str, encounter: "CombatEncounter", targets: List[str], 
+                   slot_level: Optional[int] = None, caster_ability: str = "INT") -> Dict[str, Any]:
         return encounter.cast_spell(self.char_id, spell_name, slot_level, targets, caster_ability)
 
     def start_concentration(self, spell: Spell, save_dc: int, started_at_round: int) -> None:
@@ -523,11 +538,14 @@ class Combatant:
     token_id: Optional[str] = None
 
     def to_dict(self) -> Dict[str, Any]:
-        return {"character": self.character.to_dict(), "initiative": self.initiative, "alive": self.alive, "is_npc": self.is_npc, "token_id": self.token_id}
+        return {"character": self.character.to_dict(), "initiative": self.initiative, 
+                "alive": self.alive, "is_npc": self.is_npc, "token_id": self.token_id}
 
     @staticmethod
     def from_dict(data: Dict[str, Any]) -> "Combatant":
-        return Combatant(character=Character.from_dict(data["character"]), initiative=data.get("initiative"), alive=data.get("alive", True), is_npc=data.get("is_npc", False), token_id=data.get("token_id"))
+        return Combatant(character=Character.from_dict(data["character"]), 
+                         initiative=data.get("initiative"), alive=data.get("alive", True), 
+                         is_npc=data.get("is_npc", False), token_id=data.get("token_id"))
 
 class CombatEncounter:
     def __init__(self, name: str = "Encounter"):
@@ -545,7 +563,8 @@ class CombatEncounter:
     def start(self, initiatives: Dict[str, int]) -> None:
         for c in self.combatants:
             c.initiative = initiatives.get(c.character.char_id, 0)
-        self.combatants.sort(key=lambda c: (c.initiative if c.initiative is not None else -999, c.character.ability_mod("DEX")), reverse=True)
+        self.combatants.sort(key=lambda c: (c.initiative if c.initiative is not None else -999, 
+                                            c.character.ability_mod("DEX")), reverse=True)
         self.round = 1
         self.turn_index = 0
 
@@ -572,7 +591,8 @@ class CombatEncounter:
             self.turn_index = 0
         return self.combatants[self.turn_index]
 
-    def perform_attack(self, attacker_id: str, defender_id: str, attack_roll_total: int, damage: int, crit: bool = False) -> Dict[str, Any]:
+    def perform_attack(self, attacker_id: str, defender_id: str, 
+                       attack_roll_total: int, damage: int, crit: bool = False) -> Dict[str, Any]:
         attacker = next((c for c in self.combatants if c.character.char_id == attacker_id), None)
         defender = next((c for c in self.combatants if c.character.char_id == defender_id), None)
         if not attacker or not defender:
@@ -581,8 +601,8 @@ class CombatEncounter:
         applied_damage = damage * (2 if crit else 1) if hit else 0
         res = {"hit": hit, "applied_damage": applied_damage, "defender_before_hp": defender.character.current_hp}
         if hit:
-            dmg_res = defender.character.apply_damage(applied_damage)
-            res.update(dmg_res)
+            Expandedg_res = defender.character.apply_damage(applied_damage)
+            res.update(Expandedg_res)
             if defender.character.current_hp <= 0:
                 defender.alive = False
                 res["defender_alive"] = False
@@ -590,7 +610,8 @@ class CombatEncounter:
                 res["defender_alive"] = True
         return res
 
-    def cast_spell(self, caster_id: str, spell_name: str, slot_level: Optional[int], target_ids: List[str], caster_ability: str = "INT") -> Dict[str, Any]:
+    def cast_spell(self, caster_id: str, spell_name: str, slot_level: Optional[int], 
+                   target_ids: List[str], caster_ability: str = "INT") -> Dict[str, Any]:
         caster = next((c for c in self.combatants if c.character.char_id == caster_id), None)
         if not caster:
             raise ValueError("Caster not in encounter")
@@ -625,11 +646,11 @@ class CombatEncounter:
                 roll = random.randint(1, 20)
                 save_roll_val = roll + tgt.character.saving_throw_modifier(sp.save)
                 save_succeeded = save_roll_val >= dc
-            dmg_total, dmg_detail = _roll_damage_expr(sp.damage_expr)
+            Expandedg_total, Expandedg_detail = _roll_damage_expr(sp.damage_expr)
             if sp.save and sp.save_half and save_succeeded:
-                damage_done = max(0, dmg_total // 2)
+                damage_done = max(0, Expandedg_total // 2)
             else:
-                damage_done = dmg_total if (sp.damage_expr and (not sp.save or not save_succeeded or not sp.save_half)) else 0
+                damage_done = Expandedg_total if (sp.damage_expr and (not sp.save or not save_succeeded or not sp.save_half)) else 0
             applied = tgt.character.apply_damage(damage_done, con_save_roll=save_roll_val)
             if tgt.character.current_hp <= 0:
                 tgt.alive = False
@@ -638,27 +659,29 @@ class CombatEncounter:
                 "save_required": bool(sp.save),
                 "save_roll_total": save_roll_val,
                 "save_succeeded": save_succeeded,
-                "damage_roll": dmg_detail,
+                "damage_roll": Expandedg_detail,
                 "damage_applied": damage_done,
                 "after": applied
             }
         return results
 
-    def apply_area_damage(self, damage_map: Dict[str, int], con_saves: Optional[Dict[str, int]] = None) -> Dict[str, Any]:
+    def apply_area_damage(self, damage_map: Dict[str, int], 
+                          con_saves: Optional[Dict[str, int]] = None) -> Dict[str, Any]:
         results = {}
-        for tid, dmg in damage_map.items():
+        for tid, Expandedg in damage_map.items():
             target = next((c for c in self.combatants if c.character.char_id == tid), None)
             if not target:
                 continue
             con_roll = con_saves.get(tid) if con_saves else None
-            res = target.character.apply_damage(dmg, con_save_roll=con_roll)
+            res = target.character.apply_damage(Expandedg, con_save_roll=con_roll)
             if target.character.current_hp <= 0:
                 target.alive = False
             results[tid] = res
         return results
 
     def to_dict(self) -> Dict[str, Any]:
-        return {"name": self.name, "round": self.round, "turn_index": self.turn_index, "combatants": [c.to_dict() for c in self.combatants]}
+        return {"name": self.name, "round": self.round, "turn_index": self.turn_index, 
+                "combatants": [c.to_dict() for c in self.combatants]}
 
     @staticmethod
     def from_dict(data: Dict[str, Any]) -> "CombatEncounter":
@@ -718,741 +741,18 @@ class Game:
         g.party = data.get("party", [])
         return g
 
-class DnDApp(tk.Tk):
-    def __init__(self):
-        super().__init__()
-        self.title("DnD Manager")
-        try:
-            self.attributes("-fullscreen", True)
-            self.bind("<Escape>", lambda e: self.attributes("-fullscreen", False))
-        except Exception:
-            self.geometry("1000x650")
-        self.minsize(900, 600)
-        self.columnconfigure(0, weight=0)   # left
-        self.columnconfigure(1, weight=1)   # middle (expand)
-        self.columnconfigure(2, weight=0)   # right
-        # main content will be on row=1; header is row=0
-        self.rowconfigure(1, weight=1)
-
-        style = ttk.Style(self)
-        try:
-            style.theme_use('clam')
-        except Exception:
-            pass
-        bg = "#2b2b2b"
-        midbg = "#333333"
-        fg = "#e6e6e6"
-        entry_bg = "#3a3a3a"
-        style.configure('.', background=bg, foreground=fg, fieldbackground=entry_bg)
-        style.configure('TLabel', background=bg, foreground=fg)
-        style.configure('TButton', background=midbg, foreground=fg)
-        style.map('TButton', background=[('active', '#444444')])
-        self.configure(bg=bg)
-        self._base_dir = os.path.dirname(__file__) if '__file__' in globals() else os.getcwd()
-        self.game = Game()
-        default_path = os.path.join(self._base_dir, "game_save.json")
-        if os.path.exists(default_path):
-            try:
-                self.game = Game.load(default_path)
-            except Exception:
-                pass
-
-        # mode state: "DM" or "Player"
-        self.mode = "DM"
-
-        self._style_colors = (bg, midbg, fg, entry_bg)
-
-        # build UI (header + main panes). create_widgets will create header at row 0 and main panes at row 1
-        self.create_widgets()
-
-        # initial mode prompt
-        self.prompt_initial_mode()
-
-        # data initialization
-        try:
-            init_api_indexes()
-        except Exception:
-            pass
-        try:
-            load_spell_library(os.path.join(self._base_dir, "spells.json"))
-        except Exception:
-            pass
-
-        self.refresh_char_list()
-        self.refresh_enc_list()
-
-    def prompt_initial_mode(self):
-        try:
-            resp = messagebox.askyesno("Mode", "Open in DM mode? (Yes = DM, No = Player)", parent=self)
-            self.set_mode("DM" if resp else "Player")
-        except Exception:
-            self.set_mode("DM")
-
-    def set_mode(self, mode: str):
-        self.mode = "DM" if (mode and mode.upper().startswith("D")) else "Player"
-        self.apply_mode()
-
-    def toggle_mode(self):
-        self.set_mode("Player" if self.mode == "DM" else "DM")
-
-    def apply_mode(self):
-        # update label & toggle button text
-        self.mode_label.config(text=f"Mode: {self.mode}")
-        self.mode_toggle_btn.config(text=f"Switch to {'Player' if self.mode == 'DM' else 'DM'}")
-
-        if self.mode == "DM":
-            # show right (encounters) and enable management buttons
-            if not self.right.winfo_ismapped():
-                self.right.grid(row=1, column=2, sticky="nse", padx=8, pady=8)
-            self.new_char_btn.config(state="normal")
-            self.edit_char_btn.config(state="normal")
-            self.delete_char_btn.config(state="normal")
-            self.save_btn.config(state="normal")
-            self.load_btn.config(state="normal")
-            self.add_enc_btn.config(state="normal")
-            self.delete_enc_btn.config(state="normal")
-            self.start_enc_btn.config(state="normal")
-            self.open_enc_btn.config(state="normal")
-        else:
-            # Player mode: hide right frame, disable management actions
-            if self.right.winfo_ismapped():
-                self.right.grid_remove()
-            self.new_char_btn.config(state="disabled")
-            self.edit_char_btn.config(state="disabled")
-            self.delete_char_btn.config(state="disabled")
-            self.save_btn.config(state="disabled")
-            self.load_btn.config(state="disabled")
-            self.add_enc_btn.config(state="disabled")
-            self.delete_enc_btn.config(state="disabled")
-            self.start_enc_btn.config(state="disabled")
-            self.open_enc_btn.config(state="disabled")
-
-    def create_widgets(self):
-        bg, midbg, fg, entry_bg = self._style_colors
-
-        # header row (row=0)
-        header = ttk.Frame(self)
-        header.grid(row=0, column=0, columnspan=3, sticky="ew", padx=4, pady=4)
-        header.columnconfigure(0, weight=1)
-        self.mode_label = ttk.Label(header, text="Mode: DM")
-        self.mode_label.grid(row=0, column=0, sticky="w", padx=(6,0))
-        self.mode_toggle_btn = ttk.Button(header, text="Switch to Player", width=14, command=self.toggle_mode)
-        self.mode_toggle_btn.grid(row=0, column=1, sticky="e", padx=(0,6))
-
-        # left pane (row=1)
-        self.left = ttk.Frame(self)
-        self.left.grid(row=1, column=0, sticky="nsw", padx=8, pady=8)
-        self.left.columnconfigure(0, weight=1)
-        ttk.Label(self.left, text="Characters").grid(row=0, column=0, sticky="w")
-        self.char_list = tk.Listbox(self.left, width=30, height=25,
-                                   bg=entry_bg, fg=fg, selectbackground="#5a5a5a",
-                                   highlightbackground=bg, bd=0)
-        self.char_list.grid(row=1, column=0, padx=4, pady=4, sticky="nsew")
-        self.left.rowconfigure(1, weight=1)
-        self.char_list.bind("<<ListboxSelect>>", self.on_char_select)
-
-        # management buttons (store references for enable/disable)
-        self.new_char_btn = ttk.Button(self.left, text="New Char", command=self.new_character)
-        self.new_char_btn.grid(row=2, column=0, sticky="ew", pady=2)
-        self.edit_char_btn = ttk.Button(self.left, text="Edit Char", command=self.edit_character)
-        self.edit_char_btn.grid(row=3, column=0, sticky="ew", pady=2)
-        self.delete_char_btn = ttk.Button(self.left, text="Delete Char", command=self.delete_character)
-        self.delete_char_btn.grid(row=4, column=0, sticky="ew", pady=2)
-        self.save_btn = ttk.Button(self.left, text="Save Game", command=self.save_game)
-        self.save_btn.grid(row=5, column=0, sticky="ew", pady=2)
-        self.load_btn = ttk.Button(self.left, text="Load Game", command=self.load_game)
-        self.load_btn.grid(row=6, column=0, sticky="ew", pady=2)
-        self.dice_btn = ttk.Button(self.left, text="Dice Roller", command=self.open_dice_roller)
-        self.dice_btn.grid(row=7, column=0, sticky="ew", pady=(8,0))
-
-        # middle pane (row=1)
-        self.mid = ttk.Frame(self)
-        self.mid.grid(row=1, column=1, sticky="nsew", padx=8, pady=8)
-        self.mid.columnconfigure(0, weight=1)
-        self.mid.rowconfigure(0, weight=1)
-        self.detail_text = tk.Text(self.mid, width=60, height=20, bg="#1e1e1e", fg=fg, insertbackground=fg, bd=0)
-        self.detail_text.grid(row=0, column=0, sticky="nsew")
-        act_frame = ttk.Frame(self.mid)
-        act_frame.grid(row=1, column=0, sticky="ew", pady=4)
-        act_frame.columnconfigure((0,1,2,3), weight=1)
-        ttk.Button(act_frame, text="Add to Encounter", command=self.add_to_encounter).grid(row=0, column=0, padx=4, sticky="ew")
-        ttk.Button(act_frame, text="Heal/Damage", command=self.heal_damage).grid(row=0, column=1, padx=4, sticky="ew")
-        ttk.Button(act_frame, text="Short Rest", command=self.short_rest_dialog).grid(row=0, column=2, padx=4, sticky="ew")
-        ttk.Button(act_frame, text="Long Rest", command=self.long_rest).grid(row=0, column=3, padx=4, sticky="ew")
-
-        # right pane (row=1) - encounters
-        self.right = ttk.Frame(self)
-        self.right.grid(row=1, column=2, sticky="nse", padx=8, pady=8)
-        self.right.columnconfigure(0, weight=1)
-        ttk.Label(self.right, text="Encounters").grid(row=0, column=0, sticky="w")
-        self.enc_list = tk.Listbox(self.right, width=40, height=12,
-                                   bg=entry_bg, fg=fg, selectbackground="#5a5a5a",
-                                   highlightbackground=bg, bd=0)
-        self.enc_list.grid(row=1, column=0, padx=4, pady=4, sticky="nsew")
-        self.right.rowconfigure(1, weight=1)
-        self.enc_list.bind("<<ListboxSelect>>", self.on_enc_select)
-        btnf = ttk.Frame(self.right)
-        btnf.grid(row=2, column=0, sticky="ew")
-        btnf.columnconfigure((0,1,2,3), weight=1)
-        self.add_enc_btn = ttk.Button(btnf, text="New Enc", command=self.new_encounter)
-        self.add_enc_btn.grid(row=0, column=0, sticky="ew")
-        self.delete_enc_btn = ttk.Button(btnf, text="Delete Enc", command=self.delete_encounter)
-        self.delete_enc_btn.grid(row=0, column=1, sticky="ew")
-        self.start_enc_btn = ttk.Button(btnf, text="Start Enc", command=self.start_encounter)
-        self.start_enc_btn.grid(row=0, column=2, sticky="ew")
-        self.open_enc_btn = ttk.Button(btnf, text="Open Enc", command=self.open_encounter_window)
-        self.open_enc_btn.grid(row=0, column=3, sticky="ew")
-
-    # --- rest of methods unchanged (they use self.char_list, self.left, etc.) ---
-    def refresh_char_list(self):
-        self.char_list.delete(0, tk.END)
-        for cid, ch in self.game.characters.items():
-            self.char_list.insert(tk.END, f"{ch.name} (HP {ch.current_hp}/{ch.max_hp}) [{cid}]")
-
-    def on_char_select(self, _ev=None):
-        sel = self.char_list.curselection()
-        if not sel:
-            return
-        idx = sel[0]
-        cid = list(self.game.characters.keys())[idx]
-        self.selected_char_id = cid
-        self.show_character(cid)
-
-    def show_character(self, cid: str):
-        ch = self.game.characters.get(cid)
-        if not ch:
-            return
-        t = []
-        t.append(f"Name: {ch.name}")
-        t.append(f"Player: {ch.player_name}")
-        t.append(f"Level: {ch.level}  XP: {ch.xp}  Prof bonus: {ch.prof_bonus()}")
-        t.append(f"Class/Race: {ch.char_class} / {ch.race}")
-        t.append(f"HP: {ch.current_hp}/{ch.max_hp}  Temp HP: {ch.temp_hp}")
-        t.append(f"AC: {ch.armor_class}  Speed: {ch.speed}")
-        t.append("Abilities:")
-        for k, v in ch.abilities.items():
-            t.append(f"  {k}: {v} (mod {ability_mod(v)})")
-        t.append("Conditions:")
-        for c, r in ch.conditions.items():
-            t.append(f"  {c}: {r}")
-        t.append("Inventory:")
-        for it in ch.inventory:
-            t.append(f"  {it.name} x{it.quantity} {'(consumable)' if it.consumable else ''}")
-        t.append("Spells:")
-        for sp in ch.spells:
-            t.append(f"  {sp.name} (L{sp.level})")
-        self.detail_text.delete(1.0, tk.END)
-        self.detail_text.insert(tk.END, "\n".join(t))
-
-    def new_character(self):
-        dlg = CharacterDialog(self)
-        ch = dlg.result
-        if ch:
-            self.game.add_character(ch)
-            self.refresh_char_list()
-
-    def edit_character(self):
-        if not getattr(self, "selected_char_id", None):
-            messagebox.showinfo("Info", "Select a character first")
-            return
-        ch = self.game.characters[self.selected_char_id] # type: ignore
-        dlg = CharacterDialog(self, ch)
-        updated = dlg.result
-        if updated:
-            self.game.characters[self.selected_char_id] = updated # type: ignore
-            self.refresh_char_list()
-            self.show_character(self.selected_char_id) # type: ignore
-
-    def delete_character(self):
-        if not getattr(self, "selected_char_id", None):
-            messagebox.showinfo("Info", "Select a character first")
-            return
-        if messagebox.askyesno("Confirm", "Delete selected character?"):
-            self.game.remove_character(self.selected_char_id) # type: ignore
-            self.selected_char_id = None
-            self.refresh_char_list()
-            self.detail_text.delete(1.0, tk.END)
-
-    def refresh_enc_list(self):
-        self.enc_list.delete(0, tk.END)
-        for eid, enc in self.game.encounters.items():
-            self.enc_list.insert(tk.END, f"{enc.name} Round:{enc.round} Combatants:{len(enc.combatants)} [{eid}]")
-
-    def on_enc_select(self, _ev=None):
-        sel = self.enc_list.curselection()
-        if not sel:
-            return
-        idx = sel[0]
-        eid = list(self.game.encounters.keys())[idx]
-        self.selected_enc_id = eid
-
-    def new_encounter(self):
-        name = simpledialog.askstring("Encounter", "Encounter name:", parent=self)
-        if not name:
-            return
-        eid = self.game.create_encounter(name)
-        self.refresh_enc_list()
-
-    def delete_encounter(self):
-        """Delete the currently selected encounter after confirmation."""
-        if not getattr(self, "selected_enc_id", None):
-            messagebox.showinfo("Info", "Select an encounter first", parent=self)
-            return
-        if self.selected_enc_id not in self.game.encounters:
-            messagebox.showinfo("Info", "Selected encounter no longer exists", parent=self)
-            self.selected_enc_id = None
-            self.refresh_enc_list()
-            return
-        if messagebox.askyesno("Confirm", "Delete encounter?", parent=self):
-            self.game.encounters.pop(self.selected_enc_id, None)
-            self.selected_enc_id = None
-            self.refresh_enc_list()
-
-    def add_to_encounter(self):
-        """Add the selected character to the selected encounter."""
-        if not getattr(self, "selected_enc_id", None):
-            messagebox.showinfo("Info", "Select an encounter first", parent=self)
-            return
-        if not getattr(self, "selected_char_id", None):
-            messagebox.showinfo("Info", "Select a character first", parent=self)
-            return
-        enc = self.game.encounters.get(self.selected_enc_id) # type: ignore
-        ch = self.game.characters.get(self.selected_char_id) # type: ignore
-        if enc is None or ch is None:
-            messagebox.showerror("Error", "Encounter or character not found", parent=self)
-            return
-        try:
-            self.game.add_to_encounter(self.selected_enc_id, self.selected_char_id, is_npc=False) # type: ignore
-            messagebox.showinfo("Added", f"Added {ch.name} to {enc.name}", parent=self) # type: ignore
-            self.refresh_enc_list()
-        except Exception as e:
-            messagebox.showerror("Error", str(e), parent=self)
-
-    def start_encounter(self):
-        """Prompt for initiatives and start the selected encounter."""
-        if not getattr(self, "selected_enc_id", None):
-            messagebox.showinfo("Info", "Select an encounter first", parent=self)
-            return
-        enc = self.game.encounters.get(self.selected_enc_id) # type: ignore
-        if enc is None:
-            messagebox.showerror("Error", "Encounter not found", parent=self)
-            self.selected_enc_id = None
-            self.refresh_enc_list()
-            return
-        if not enc.combatants:
-            messagebox.showinfo("Info", "Encounter has no combatants", parent=self)
-            return
-
-        initiatives: Dict[str, int] = {}
-        for c in enc.combatants:
-            default = c.character.ability_mod("DEX") + random.randint(1, 20)
-            try:
-                val = simpledialog.askinteger("Initiative",
-                                              f"Initiative for {c.character.name} (default {default}):",
-                                              parent=self,
-                                              initialvalue=default)
-            except Exception:
-                val = default
-            if val is None:
-                val = default
-            initiatives[c.character.char_id] = int(val)
-
-        try:
-            enc.start(initiatives)
-            messagebox.showinfo("Started", f"Encounter '{enc.name}' started (Round {enc.round})", parent=self)
-            self.refresh_enc_list()
-            self.open_encounter_window()
-        except Exception as e:
-            messagebox.showerror("Error starting encounter", str(e), parent=self)
-
-    def open_encounter_window(self):
-        """Open the encounter window for the selected encounter."""
-        if not getattr(self, "selected_enc_id", None):
-            messagebox.showinfo("Info", "Select an encounter first", parent=self)
-            return
-        enc = self.game.encounters.get(self.selected_enc_id) # type: ignore
-        if enc is None:
-            messagebox.showerror("Error", "Encounter not found", parent=self)
-            self.selected_enc_id = None
-            self.refresh_enc_list()
-            return
-        try:
-            EncWindow(self, enc)
-            self.refresh_enc_list()
-        except Exception as e:
-            messagebox.showerror("Error opening encounter window", str(e), parent=self)
-
-    def heal_damage(self):
-        """Heal or damage the selected character. Positive heals, negative damages."""
-        if not getattr(self, "selected_char_id", None):
-            messagebox.showinfo("Info", "Select a character first", parent=self)
-            return
-        ch = self.game.characters.get(self.selected_char_id) # type: ignore
-        if ch is None:
-            messagebox.showerror("Error", "Character not found", parent=self)
-            self.selected_char_id = None
-            self.refresh_char_list()
-            return
-        amt = simpledialog.askinteger("Heal/Damage", "Positive to heal, negative to damage:", parent=self)
-        if amt is None:
-            return
-        try:
-            if amt >= 0:
-                ch.heal(int(amt))
-            else:
-                ch.apply_damage(int(-amt))
-            self.show_character(self.selected_char_id) # type: ignore
-            self.refresh_char_list()
-        except Exception as e:
-            messagebox.showerror("Error applying heal/damage", str(e), parent=self)
-
-    def short_rest_dialog(self):
-        """Perform a short rest using comma-separated hit die rolls entered by the user."""
-        if not getattr(self, "selected_char_id", None):
-            messagebox.showinfo("Info", "Select a character first", parent=self)
-            return
-        ch = self.game.characters.get(self.selected_char_id) # type: ignore
-        if ch is None:
-            messagebox.showerror("Error", "Character not found", parent=self)
-            self.selected_char_id = None
-            self.refresh_char_list()
-            return
-        rolls = simpledialog.askstring("Short Rest", "Enter comma-separated hit die rolls (e.g. 4,5):", parent=self)
-        if rolls is None or rolls.strip() == "":
-            return
-        try:
-            rolls_list = [int(x.strip()) for x in rolls.split(",") if x.strip() != ""]
-        except ValueError:
-            messagebox.showerror("Error", "Invalid rolls - enter integers separated by commas", parent=self)
-            return
-        try:
-            ch.short_rest(rolls_list)
-            self.show_character(self.selected_char_id) # type: ignore
-            self.refresh_char_list()
-        except Exception as e:
-            messagebox.showerror("Error applying short rest", str(e), parent=self)
-
-    def long_rest(self):
-        """Apply a long rest to the selected character (full heal and restore slots by default)."""
-        if not getattr(self, "selected_char_id", None):
-            messagebox.showinfo("Info", "Select a character first", parent=self)
-            return
-        ch = self.game.characters.get(self.selected_char_id) # type: ignore
-        if ch is None:
-            messagebox.showerror("Error", "Character not found", parent=self)
-            self.selected_char_id = None
-            self.refresh_char_list()
-            return
-        try:
-            ch.long_rest()
-            self.show_character(self.selected_char_id) # type: ignore
-            self.refresh_char_list()
-        except Exception as e:
-            messagebox.showerror("Error applying long rest", str(e), parent=self)
-
-    def save_game(self):
-        fname = simpledialog.askstring("Save", "Save filename (or full path):", initialvalue="game_save.json", parent=self)
-        if not fname:
-            return
-        path = fname
-        if not os.path.isabs(path):
-            path = os.path.join(self._base_dir, path)
-        try:
-            self.game.save(path)
-            messagebox.showinfo("Saved", f"Saved to {path}")
-        except Exception as e:
-            messagebox.showerror("Error", str(e))
-
-    def load_game(self):
-        fname = simpledialog.askstring("Load", "Load filename (or full path):", initialvalue="game_save.json", parent=self)
-        if not fname:
-            return
-        path = fname
-        if not os.path.isabs(path):
-            path = os.path.join(self._base_dir, path)
-        if not os.path.exists(path):
-            messagebox.showerror("Error", f"File not found: {path}")
-            return
-        try:
-            g = Game.load(path)
-            self.game = g
-            self.selected_char_id = None
-            self.selected_enc_id = None
-            self.refresh_char_list()
-            self.refresh_enc_list()
-            messagebox.showinfo("Loaded", f"Loaded {path}")
-        except Exception as e:
-            messagebox.showerror("Error", str(e))
-
-    def open_dice_roller(self):
-        DiceRoller(self)
-
-
-class CharacterDialog(simpledialog.Dialog):
-    def __init__(self, parent, character: Optional[Character] = None):
-        self.character = character
-        self.result: Optional[Character] = None
-        super().__init__(parent, title="Character" if character is None else f"Edit {character.name}")
-
-    def body(self, master):
-        tk.Label(master, text="Name:").grid(row=0, column=0)
-        self.name_e = tk.Entry(master)
-        self.name_e.grid(row=0, column=1)
-        tk.Label(master, text="Player:").grid(row=1, column=0)
-        self.player_e = tk.Entry(master)
-        self.player_e.grid(row=1, column=1)
-        tk.Label(master, text="Level:").grid(row=2, column=0)
-        self.level_e = tk.Entry(master)
-        self.level_e.grid(row=2, column=1)
-        tk.Label(master, text="Max HP:").grid(row=3, column=0)
-        self.maxhp_e = tk.Entry(master)
-        self.maxhp_e.grid(row=3, column=1)
-
-        tk.Label(master, text="Class:").grid(row=4, column=0)
-        self.class_cb = ttk.Combobox(master, values=sorted([k.title() for k in CLASS_INDEX.keys()]) if CLASS_INDEX else [], state="readonly")
-        self.class_cb.grid(row=4, column=1, sticky="ew")
-        self.class_cb.bind("<<ComboboxSelected>>", self.on_class_selected)
-
-        self.ability_vars = {}
-        row = 5
-        for ab in ["STR", "DEX", "CON", "INT", "WIS", "CHA"]:
-            tk.Label(master, text=ab+":").grid(row=row, column=0)
-            e = tk.Entry(master, width=6)
-            e.grid(row=row, column=1, sticky="w")
-            self.ability_vars[ab] = e
-            row += 1
-
-        if self.character:
-            ch = self.character
-            self.name_e.insert(0, ch.name)
-            if ch.player_name:
-                self.player_e.insert(0, ch.player_name)
-            self.level_e.insert(0, str(ch.level))
-            self.maxhp_e.insert(0, str(ch.max_hp))
-            if ch.char_class:
-                self.class_cb.set(ch.char_class)
-            for k, ent in self.ability_vars.items():
-                ent.insert(0, str(ch.abilities.get(k, 10)))
-        else:
-            self.level_e.insert(0, "1")
-            self.maxhp_e.insert(0, "8")
-            for k, ent in self.ability_vars.items():
-                ent.insert(0, "10")
-        return self.name_e
-
-    def on_class_selected(self, _ev=None):
-        sel = self.class_cb.get()
-        if not sel:
-            return
-        idx = CLASS_INDEX.get(sel.lower()) or CLASS_INDEX.get(normalize_key(sel))
-        if not idx:
-            return
-        try:
-            r = api_get(f"{API_BASE}/api/classes/{idx}")
-            r.raise_for_status()
-            data = r.json()
-            hit_die = data.get("hit_die")
-            if hit_die:
-                try:
-                    level = int(self.level_e.get())
-                except Exception:
-                    level = 1
-                if level == 1:
-                    try:
-                        con = int(self.ability_vars.get("CON").get()) # type: ignore
-                    except Exception:
-                        con = 10
-                    con_mod = ability_mod(con)
-                    suggested = hit_die + con_mod
-                    self.maxhp_e.delete(0, tk.END)
-                    self.maxhp_e.insert(0, str(max(1, suggested)))
-        except Exception:
-            pass
-
-    def apply(self):
-        name = self.name_e.get().strip() or "Unnamed"
-        player = self.player_e.get().strip() or None
-        try:
-            level = int(self.level_e.get())
-        except Exception:
-            level = 1
-        try:
-            max_hp = int(self.maxhp_e.get())
-        except Exception:
-            max_hp = 8
-        abilities = {}
-        for k, ent in self.ability_vars.items():
-            try:
-                abilities[k] = int(ent.get())
-            except Exception:
-                abilities[k] = 10
-        cls = self.class_cb.get().strip()
-        ch = Character(name=name, player_name=player, level=level, max_hp=max_hp, current_hp=max_hp, abilities=abilities, char_class=cls)
-        self.result = ch
-
-class EncWindow(tk.Toplevel):
-    def __init__(self, parent: tk.Tk, encounter: CombatEncounter):
-        super().__init__(parent)
-        self.title(f"Encounter: {encounter.name}")
-        self.geometry("800x520")
-        self.minsize(600, 380)
-        self.enc = encounter
-        self.create_widgets()
-        self.refresh()
-
-    def create_widgets(self):
-        top = ttk.Frame(self)
-        top.pack(fill="both", expand=True, padx=8, pady=8)
-        self.lst = tk.Listbox(top)
-        self.lst.pack(fill="both", expand=True, side="left")
-        right = ttk.Frame(top)
-        right.pack(side="right", fill="y")
-        ttk.Button(right, text="Next Turn", command=self.next_turn).pack(fill="x", pady=2)
-        ttk.Button(right, text="Prev Turn", command=self.prev_turn).pack(fill="x", pady=2)
-        ttk.Button(right, text="Damage", command=self.apply_damage).pack(fill="x", pady=2)
-        ttk.Button(right, text="Area Damage", command=self.area_damage).pack(fill="x", pady=2)
-        ttk.Button(right, text="Roll Initiative", command=self.roll_initiative).pack(fill="x", pady=2)
-
-    def refresh(self):
-        self.lst.delete(0, tk.END)
-        for i, c in enumerate(self.enc.combatants):
-            cur = "(current)" if i == self.enc.turn_index else ""
-            self.lst.insert(tk.END, f"{i+1}. {c.character.name} HP:{c.character.current_hp}/{c.character.max_hp} Init:{c.initiative} {cur}")
-
-    def next_turn(self):
-        try:
-            cb = self.enc.next_turn()
-            messagebox.showinfo("Turn", f"Now: {cb.character.name} (Round {self.enc.round})")
-            self.refresh()
-        except Exception as e:
-            messagebox.showerror("Error", str(e))
-
-    def prev_turn(self):
-        try:
-            cb = self.enc.previous_turn()
-            messagebox.showinfo("Turn", f"Now: {cb.character.name}")
-            self.refresh()
-        except Exception as e:
-            messagebox.showerror("Error", str(e))
-
-    def apply_damage(self):
-        sel = self.lst.curselection()
-        if not sel:
-            messagebox.showinfo("Info", "Select a target")
-            return
-        idx = sel[0]
-        target = self.enc.combatants[idx]
-        dmg = simpledialog.askinteger("Damage", f"Damage to {target.character.name}:", parent=self)
-        if dmg is None:
-            return
-        res = target.character.apply_damage(dmg)
-        if target.character.current_hp <= 0:
-            target.alive = False
-        messagebox.showinfo("Result", f"Applied {dmg}. HP now {target.character.current_hp}/{target.character.max_hp}")
-        self.refresh()
-
-    def area_damage(self):
-        if not self.enc.combatants:
-            return
-        dmg_map = {}
-        for c in self.enc.combatants:
-            v = simpledialog.askstring("Area Damage", f"Damage to {c.character.name} (blank skip):", parent=self)
-            if not v or v.strip() == "":
-                continue
-            try:
-                dmg_map[c.character.char_id] = int(v.strip())
-            except ValueError:
-                continue
-        if not dmg_map:
-            return
-        con_saves = {}
-        if messagebox.askyesno("Con saves", "Provide CON saves for concentration checks?"):
-            for c in self.enc.combatants:
-                if c.character.char_id in dmg_map:
-                    val = simpledialog.askinteger("Con save", f"CON save total for {c.character.name} (blank skip):", parent=self)
-                    if val is not None:
-                        con_saves[c.character.char_id] = val
-        res = self.enc.apply_area_damage(dmg_map, con_saves if con_saves else None)
-        messagebox.showinfo("Area Damage", f"Results: {res}")
-        self.refresh()
-
-    def roll_initiative(self):
-        for c in self.enc.combatants:
-            c.initiative = random.randint(1,20) + c.character.ability_mod("DEX")
-        self.enc.combatants.sort(key=lambda c: (c.initiative if c.initiative is not None else 0, c.character.ability_mod("DEX")), reverse=True)
-        messagebox.showinfo("Init", "Rolled initiative")
-        self.refresh()
-
-class DiceRoller(tk.Toplevel):
-    def __init__(self, parent: tk.Tk):
-        super().__init__(parent)
-        self.title("Dice Roller")
-        self.geometry("420x360")
-        self.minsize(360, 300)
-        self.create_widgets()
-
-    def create_widgets(self):
-        frame = ttk.Frame(self)
-        frame.pack(fill="both", expand=True, padx=8, pady=8)
-
-        for i in range(3):
-            frame.columnconfigure(i, weight=1)
-
-        buttons = [("d4", "1d4"), ("d6", "1d6"), ("d8", "1d8"),
-                ("d10", "1d10"), ("d12", "1d12"), ("d20", "1d20"),
-                ("d100", "1d100")]
-        for idx, (lab, expr) in enumerate(buttons):
-            r = idx // 3
-            c = idx % 3
-            b = ttk.Button(frame, text=lab, command=lambda e=expr: self.roll(e))
-            b.grid(row=r, column=c, padx=4, pady=4, sticky="nsew")
-        label_row = (len(buttons) - 1) // 3 + 1
-        ttk.Label(frame, text="Custom (NdM+K):").grid(row=label_row, column=0, columnspan=3, sticky="w", pady=(6,0))
-        self.custom_e = tk.Entry(frame)
-        self.custom_e.grid(row=label_row+1, column=0, columnspan=2, sticky="ew", padx=(0,4))
-        ttk.Button(frame, text="Roll", command=self.roll_custom).grid(row=label_row+1, column=2, sticky="ew")
-        self.out = tk.Text(frame, height=8)
-        self.out.grid(row=label_row+2, column=0, columnspan=3, sticky="nsew", pady=8)
-        frame.rowconfigure(label_row+2, weight=1)
-
-    def roll(self, expr: str):
-        total, detail = roll_expression(expr)
-        self.out.insert(tk.END, f"{expr} -> {total} ({detail})\n")
-        self.out.see(tk.END)
-
-    def roll_custom(self):
-        expr = self.custom_e.get().strip()
-        if not expr:
-            return
-        try:
-            total, detail = roll_expression(expr)
-            self.out.insert(tk.END, f"{expr} -> {total} ({detail})\n")
-            self.out.see(tk.END)
-        except Exception as e:
-            messagebox.showerror("Error", f"Invalid expression: {e}")
-
 def roll_expression(expr: str) -> Tuple[int, str]:
-    """
-    Parse and roll expressions like:
-      - "1d6", "2d8+3", "4", "d20", "3d6+2"
-    Returns (total, detail).
-    Raises ValueError on invalid syntax.
-    """
     if not isinstance(expr, str) or not expr.strip():
         raise ValueError("Empty expression")
 
     e = expr.replace(" ", "").lower()
     plus = 0
-    # support + and - modifiers (only a single trailing +/- number supported)
-    # find last + or - that is not part of a dice count (e.g. 1d6-1)
     mod_idx = None
     for i in range(len(e)-1, -1, -1):
         if e[i] in "+-":
-            # ensure it's not the 'd' or part of number like "-2" at start
             if i == 0:
                 mod_idx = i
                 break
-            # if preceding char is digit or letter, accept as modifier separator
             if e[i-1].isdigit() or e[i-1] == 'd':
                 mod_idx = i
                 break
@@ -1465,7 +765,6 @@ def roll_expression(expr: str) -> Tuple[int, str]:
             raise ValueError("Invalid modifier in expression")
 
     if not e:
-        # expression was just a modifier like "+3" or "-2"
         return plus, f"modifier only {plus:+d}"
 
     if 'd' in e:
@@ -1482,38 +781,872 @@ def roll_expression(expr: str) -> Tuple[int, str]:
         total = sum(rolls) + plus
         return total, f"rolls={rolls}{' ' + ('+' if plus>=0 else '') + str(plus) if plus!=0 else ''}"
     else:
-        # constant integer
         try:
             total = int(e) + plus
             return total, f"const {int(e)} {'+' if plus>=0 else ''}{plus}" if plus != 0 else f"const {int(e)}"
         except Exception:
             raise ValueError("Invalid numeric expression")
 
-# Initialize caches and local library once at module load; be robust about paths
-try:
-    init_api_indexes()
-except Exception:
-    # don't crash the program if API indexing fails
-    pass
+# Kivy UI Components
+class MessagePopup(Popup):
+    def __init__(self, title, message, **kwargs):
+        super().__init__(**kwargs)
+        self.title = title
+        self.size_hint = (0.8, 0.4)
+        layout = BoxLayout(orientation='vertical')
+        layout.add_widget(Label(text=message))
+        btn = Button(text='OK', size_hint_y=0.3)
+        btn.bind(on_press=self.dismiss)
+        layout.add_widget(btn)
+        self.add_widget(layout)
 
-try:
-    # try current working directory first, then script directory
-    load_spell_library("spells.json")
-except Exception:
-    try:
-        base = os.path.dirname(__file__) if '__file__' in globals() else os.getcwd()
-        load_spell_library(os.path.join(base, "spells.json"))
-    except Exception:
-        # final fallback: empty library (already handled inside load_spell_library)
-        pass
+class InputPopup(Popup):
+    def __init__(self, title, prompt, callback, **kwargs):
+        super().__init__(**kwargs)
+        self.title = title
+        self.size_hint = (0.8, 0.4)
+        self.callback = callback
+        layout = BoxLayout(orientation='vertical')
+        layout.add_widget(Label(text=prompt))
+        self.input = TextInput(multiline=False)
+        layout.add_widget(self.input)
+        btn_layout = BoxLayout(size_hint_y=0.3)
+        ok_btn = Button(text='OK')
+        ok_btn.bind(on_press=self.on_ok)
+        cancel_btn = Button(text='Cancel')
+        cancel_btn.bind(on_press=self.dismiss)
+        btn_layout.add_widget(ok_btn)
+        btn_layout.add_widget(cancel_btn)
+        layout.add_widget(btn_layout)
+        self.add_widget(layout)
+
+    def on_ok(self, instance):
+        self.callback(self.input.text)
+        self.dismiss()
+
+class NumericInputPopup(Popup):
+    def __init__(self, title, prompt, callback, **kwargs):
+        super().__init__(**kwargs)
+        self.title = title
+        self.size_hint = (0.8, 0.4)
+        self.callback = callback
+        layout = BoxLayout(orientation='vertical')
+        layout.add_widget(Label(text=prompt))
+        self.input = TextInput(multiline=False, input_filter='int')
+        layout.add_widget(self.input)
+        btn_layout = BoxLayout(size_hint_y=0.3)
+        ok_btn = Button(text='OK')
+        ok_btn.bind(on_press=self.on_ok)
+        cancel_btn = Button(text='Cancel')
+        cancel_btn.bind(on_press=self.dismiss)
+        btn_layout.add_widget(ok_btn)
+        btn_layout.add_widget(cancel_btn)
+        layout.add_widget(btn_layout)
+        self.add_widget(layout)
+
+    def on_ok(self, instance):
+        try:
+            value = int(self.input.text)
+            self.callback(value)
+            self.dismiss()
+        except ValueError:
+            MessagePopup("Error", "Please enter a valid number").open()
+
+class CharacterDialog(ModalView):
+    def __init__(self, app, character=None, **kwargs):
+        super().__init__(**kwargs)
+        self.app = app
+        self.character = character
+        self.size_hint = (0.9, 0.9)
+        self.title = "Edit Character" if character else "New Character"
+        
+        layout = BoxLayout(orientation='vertical')
+        
+        # Name and basic info
+        form_layout = GridLayout(cols=2, size_hint_y=None, height=200)
+        form_layout.add_widget(Label(text="Name:"))
+        self.name_input = TextInput(text=character.name if character else "", multiline=False)
+        form_layout.add_widget(self.name_input)
+        
+        form_layout.add_widget(Label(text="Player:"))
+        self.player_input = TextInput(text=character.player_name if character else "", multiline=False)
+        form_layout.add_widget(self.player_input)
+        
+        form_layout.add_widget(Label(text="Level:"))
+        self.level_input = TextInput(text=str(character.level) if character else "1", multiline=False, input_filter='int')
+        form_layout.add_widget(self.level_input)
+        
+        form_layout.add_widget(Label(text="Max HP:"))
+        self.hp_input = TextInput(text=str(character.max_hp) if character else "8", multiline=False, input_filter='int')
+        form_layout.add_widget(self.hp_input)
+        
+        form_layout.add_widget(Label(text="Class:"))
+        class_values = sorted([k.title() for k in CLASS_INDEX.keys()]) if CLASS_INDEX else []
+        self.class_spinner = Spinner(text=character.char_class if character else "", values=class_values)
+        form_layout.add_widget(self.class_spinner)
+        
+        layout.add_widget(form_layout)
+        
+        # Abilities
+        abilities_layout = GridLayout(cols=7, size_hint_y=None, height=100)
+        self.ability_inputs = {}
+        abilities = ["STR", "DEX", "CON", "INT", "WIS", "CHA"]
+        for ab in abilities:
+            abilities_layout.add_widget(Label(text=ab))
+            input_field = TextInput(
+                text=str(character.abilities.get(ab, 10)) if character else "10", 
+                multiline=False, 
+                size_hint_x=None,
+                width=60,
+                input_filter='int'
+            )
+            self.ability_inputs[ab] = input_field
+            abilities_layout.add_widget(input_field)
+        layout.add_widget(abilities_layout)
+        
+        # Buttons
+        btn_layout = BoxLayout(size_hint_y=0.1)
+        save_btn = Button(text="Save")
+        save_btn.bind(on_press=self.save_character)
+        cancel_btn = Button(text="Cancel")
+        cancel_btn.bind(on_press=self.dismiss)
+        btn_layout.add_widget(save_btn)
+        btn_layout.add_widget(cancel_btn)
+        layout.add_widget(btn_layout)
+        
+        self.add_widget(layout)
+
+    def save_character(self, instance):
+        try:
+            name = self.name_input.text.strip() or "Unnamed"
+            player = self.player_input.text.strip() or None
+            level = int(self.level_input.text) if self.level_input.text else 1
+            max_hp = int(self.hp_input.text) if self.hp_input.text else 8
+            char_class = self.class_spinner.text
+            
+            abilities = {}
+            for ab, widget in self.ability_inputs.items():
+                abilities[ab] = int(widget.text) if widget.text else 10
+            
+            if self.character:
+                # Update existing character
+                self.character.name = name
+                self.character.player_name = player
+                self.character.level = level
+                self.character.max_hp = max_hp
+                self.character.current_hp = max_hp
+                self.character.char_class = char_class
+                self.character.abilities = abilities
+                result = self.character
+            else:
+                # Create new character
+                result = Character(
+                    name=name,
+                    player_name=player,
+                    level=level,
+                    max_hp=max_hp,
+                    current_hp=max_hp,
+                    char_class=char_class,
+                    abilities=abilities
+                )
+            
+            self.app.on_character_dialog_result(result)
+            self.dismiss()
+        except Exception as e:
+            MessagePopup("Error", f"Error saving character: {str(e)}").open()
+
+class CharacterTab(TabbedPanelItem):
+    def __init__(self, character, app, **kwargs):
+        super().__init__(**kwargs)
+        self.character = character
+        self.app = app
+        self.text = character.name
+        
+        layout = ScrollView()
+        content = BoxLayout(orientation='vertical', size_hint_y=None)
+        content.bind(minimum_height=content.setter('height'))
+        
+        # Header
+        header = BoxLayout(size_hint_y=None, height=80)
+        header.add_widget(Label(text=f"{character.name}\nPlayer: {character.player_name or 'N/A'}"))
+        content.add_widget(header)
+        
+        # Conditions
+        conditions_label = Label(text="Conditions:", size_hint_y=None, height=30)
+        content.add_widget(conditions_label)
+        
+        conditions_layout = GridLayout(cols=3, size_hint_y=None)
+        conditions_layout.bind(minimum_height=conditions_layout.setter('height'))
+        
+        for condition in sorted(CONDITIONS):
+            condition_box = BoxLayout(orientation='horizontal', size_hint_y=None, height=40)
+            checkbox = CheckBox(active=condition in character.conditions)
+            checkbox.bind(active=lambda instance, value, cond=condition: self.toggle_condition(cond, value))
+            condition_box.add_widget(checkbox)
+            condition_box.add_widget(Label(text=condition.title()))
+            conditions_layout.add_widget(condition_box)
+        
+        content.add_widget(conditions_layout)
+        
+        # Spell Slots
+        if character.spell_slots:
+            slots_label = Label(text="Spell Slots:", size_hint_y=None, height=30)
+            content.add_widget(slots_label)
+            
+            for level in sorted(character.spell_slots.keys()):
+                slot = character.spell_slots[level]
+                slot_layout = BoxLayout(size_hint_y=None, height=50)
+                slot_layout.add_widget(Label(text=f"Level {level}: {slot.get('current', 0)}/{slot.get('max', 0)}"))
+                
+                btn_layout = BoxLayout(size_hint_x=0.4)
+                dec_btn = Button(text="-")
+                dec_btn.bind(on_press=lambda x, lvl=level: self.change_slot(lvl, -1))
+                inc_btn = Button(text="+")
+                inc_btn.bind(on_press=lambda x, lvl=level: self.change_slot(lvl, 1))
+                btn_layout.add_widget(dec_btn)
+                btn_layout.add_widget(inc_btn)
+                slot_layout.add_widget(btn_layout)
+                
+                content.add_widget(slot_layout)
+        
+        layout.add_widget(content)
+        self.add_widget(layout)
+    
+    def toggle_condition(self, condition, active):
+        if active:
+            self.character.conditions[condition] = -1
+        else:
+            self.character.conditions.pop(condition, None)
+        self.app.refresh_character_tabs()
+    
+    def change_slot(self, level, delta):
+        slot = self.character.spell_slots.get(level)
+        if slot:
+            current = slot.get("current", 0)
+            max_slots = slot.get("max", 0)
+            new_current = max(0, min(max_slots, current + delta))
+            slot["current"] = new_current
+            self.app.refresh_character_tabs()
+
+class DiceRollerPopup(Popup):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.title = "Dice Roller"
+        self.size_hint = (0.8, 0.8)
+        
+        layout = BoxLayout(orientation='vertical')
+        
+        # Standard dice buttons
+        dice_layout = GridLayout(cols=3, size_hint_y=0.6)
+        dice_buttons = [
+            ("d4", "1d4"), ("d6", "1d6"), ("d8", "1d8"),
+            ("d10", "1d10"), ("d12", "1d12"), ("d20", "1d20"),
+            ("d100", "1d100")
+        ]
+        
+        for label, expr in dice_buttons:
+            btn = Button(text=label)
+            btn.bind(on_press=lambda instance, e=expr: self.roll_dice(e))
+            dice_layout.add_widget(btn)
+        
+        layout.add_widget(dice_layout)
+        
+        # Custom roll
+        custom_layout = BoxLayout(size_hint_y=0.2)
+        self.custom_input = TextInput(text="", hint_text="e.g., 2d6+3", multiline=False)
+        custom_layout.add_widget(self.custom_input)
+        custom_btn = Button(text="Roll", size_hint_x=0.3)
+        custom_btn.bind(on_press=self.roll_custom)
+        custom_layout.add_widget(custom_btn)
+        layout.add_widget(custom_layout)
+        
+        # Results
+        self.results_output = TextInput(text="", readonly=True, size_hint_y=0.2)
+        layout.add_widget(self.results_output)
+        
+        self.add_widget(layout)
+    
+    def roll_dice(self, expression):
+        try:
+            total, detail = roll_expression(expression)
+            self.results_output.text += f"{expression}: {total} ({detail})\n"
+        except Exception as e:
+            self.results_output.text += f"Error: {str(e)}\n"
+    
+    def roll_custom(self, instance):
+        expression = self.custom_input.text.strip()
+        if expression:
+            self.roll_dice(expression)
+
+class EncounterWindow(Popup):
+    def __init__(self, encounter, app, **kwargs):
+        super().__init__(**kwargs)
+        self.encounter = encounter
+        self.app = app
+        self.title = f"Encounter: {encounter.name}"
+        self.size_hint = (0.9, 0.9)
+        
+        layout = BoxLayout(orientation='vertical')
+        
+        # Combatant list
+        self.combatant_list = ScrollView()
+        self.list_layout = BoxLayout(orientation='vertical', size_hint_y=None)
+        self.list_layout.bind(minimum_height=self.list_layout.setter('height'))
+        self.combatant_list.add_widget(self.list_layout)
+        layout.add_widget(self.combatant_list)
+        
+        # Controls
+        controls = BoxLayout(size_hint_y=0.1)
+        controls.add_widget(Button(text="Next Turn", on_press=self.next_turn))
+        controls.add_widget(Button(text="Prev Turn", on_press=self.prev_turn))
+        controls.add_widget(Button(text="Damage", on_press=self.apply_damage))
+        controls.add_widget(Button(text="Area Damage", on_press=self.area_damage))
+        controls.add_widget(Button(text="Roll Initiative", on_press=self.roll_initiative))
+        layout.add_widget(controls)
+        
+        self.refresh_list()
+        self.add_widget(layout)
+    
+    def refresh_list(self):
+        self.list_layout.clear_widgets()
+        for i, combatant in enumerate(self.encounter.combatants):
+            current_indicator = " (CURRENT)" if i == self.encounter.turn_index else ""
+            btn = Button(
+                text=f"{i+1}. {combatant.character.name} HP: {combatant.character.current_hp}/{combatant.character.max_hp} Init: {combatant.initiative}{current_indicator}",
+                size_hint_y=None,
+                height=60
+            )
+            btn.combatant_index = i
+            btn.bind(on_press=self.on_combatant_select)
+            self.list_layout.add_widget(btn)
+    
+    def on_combatant_select(self, instance):
+        self.selected_combatant_index = instance.combatant_index
+    
+    def next_turn(self, instance):
+        try:
+            combatant = self.encounter.next_turn()
+            MessagePopup("Turn", f"Now: {combatant.character.name} (Round {self.encounter.round})").open()
+            self.refresh_list()
+        except Exception as e:
+            MessagePopup("Error", str(e)).open()
+    
+    def prev_turn(self, instance):
+        try:
+            combatant = self.encounter.previous_turn()
+            MessagePopup("Turn", f"Now: {combatant.character.name}").open()
+            self.refresh_list()
+        except Exception as e:
+            MessagePopup("Error", str(e)).open()
+    
+    def apply_damage(self, instance):
+        if not hasattr(self, 'selected_combatant_index'):
+            MessagePopup("Info", "Select a combatant first").open()
+            return
+        
+        def apply_damage_callback(amount):
+            try:
+                amount = int(amount)
+                combatant = self.encounter.combatants[self.selected_combatant_index]
+                result = combatant.character.apply_damage(amount)
+                if combatant.character.current_hp <= 0:
+                    combatant.alive = False
+                MessagePopup("Result", f"Applied {amount} damage. HP now: {combatant.character.current_hp}/{combatant.character.max_hp}").open()
+                self.refresh_list()
+            except ValueError:
+                MessagePopup("Error", "Invalid damage amount").open()
+        
+        NumericInputPopup("Damage", "Enter damage amount:", apply_damage_callback).open()
+    
+    def area_damage(self, instance):
+        # Simplified area damage - apply same damage to all
+        def apply_area_damage_callback(amount):
+            try:
+                amount = int(amount)
+                damage_map = {}
+                for combatant in self.encounter.combatants:
+                    damage_map[combatant.character.char_id] = amount
+                
+                result = self.encounter.apply_area_damage(damage_map)
+                MessagePopup("Area Damage", f"Applied {amount} damage to all combatants").open()
+                self.refresh_list()
+            except ValueError:
+                MessagePopup("Error", "Invalid damage amount").open()
+        
+        NumericInputPopup("Area Damage", "Enter damage amount for all:", apply_area_damage_callback).open()
+    
+    def roll_initiative(self, instance):
+        for combatant in self.encounter.combatants:
+            combatant.initiative = random.randint(1, 20) + combatant.character.ability_mod("DEX")
+        self.encounter.combatants.sort(
+            key=lambda c: (c.initiative if c.initiative is not None else 0, c.character.ability_mod("DEX")), 
+            reverse=True
+        )
+        MessagePopup("Initiative", "Rolled initiative for all combatants").open()
+        self.refresh_list()
+
+class DnDManagerApp(App):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.game = Game()
+        self.selected_char_id = None
+        self.selected_enc_id = None
+        self.mode = "Expanded"  # or "Player"
+        
+        # Initialize data
+        self._base_dir = os.getcwd()
+        default_path = os.path.join(self._base_dir, "game_save.json")
+        if os.path.exists(default_path):
+            try:
+                self.game = Game.load(default_path)
+            except Exception:
+                pass
+        
+        try:
+            init_api_indexes()
+        except Exception:
+            pass
+        
+        try:
+            load_spell_library(os.path.join(self._base_dir, "spells.json"))
+        except Exception:
+            pass
+
+    def build(self):
+        Window.clearcolor = (0.1, 0.1, 0.1, 1)
+        return self.create_main_layout()
+
+    def create_main_layout(self):
+        # Main layout
+        main_layout = BoxLayout(orientation='vertical')
+        
+        # Header
+        header = BoxLayout(size_hint_y=0.1)
+        self.mode_label = Label(text=f"Mode: {self.mode}")
+        mode_btn = Button(text="Switch Mode", on_press=self.toggle_mode)
+        exit_btn = Button(text="Exit", on_press=self.exit_app, size_hint_x=0.2)
+        header.add_widget(self.mode_label)
+        header.add_widget(mode_btn)
+        header.add_widget(exit_btn)
+        main_layout.add_widget(header)
+        
+        # Content area
+        content = BoxLayout()
+        
+        # Left panel - Characters
+        left_panel = BoxLayout(orientation='vertical', size_hint_x=0.3)
+        left_panel.add_widget(Label(text="Characters", size_hint_y=0.05))
+        
+        # Character list
+        char_scroll = ScrollView()
+        self.char_list_layout = BoxLayout(orientation='vertical', size_hint_y=None)
+        self.char_list_layout.bind(minimum_height=self.char_list_layout.setter('height'))
+        char_scroll.add_widget(self.char_list_layout)
+        left_panel.add_widget(char_scroll)
+        
+        # Character buttons
+        char_buttons = BoxLayout(size_hint_y=0.2)
+        self.new_char_btn = Button(text="New Char", on_press=self.new_character)
+        self.edit_char_btn = Button(text="Edit Char", on_press=self.edit_character)
+        self.delete_char_btn = Button(text="Delete Char", on_press=self.delete_character)
+        char_buttons.add_widget(self.new_char_btn)
+        char_buttons.add_widget(self.edit_char_btn)
+        char_buttons.add_widget(self.delete_char_btn)
+        left_panel.add_widget(char_buttons)
+        
+        # Character tabs
+        self.char_tabs = TabbedPanel(size_hint_y=0.5)
+        left_panel.add_widget(self.char_tabs)
+        
+        # Game management buttons
+        game_buttons = BoxLayout(size_hint_y=0.1)
+        game_buttons.add_widget(Button(text="Save Game", on_press=self.save_game))
+        game_buttons.add_widget(Button(text="Load Game", on_press=self.load_game))
+        game_buttons.add_widget(Button(text="Dice Roller", on_press=self.open_dice_roller))
+        left_panel.add_widget(game_buttons)
+        
+        content.add_widget(left_panel)
+        
+        # Middle panel - Character details
+        middle_panel = BoxLayout(orientation='vertical', size_hint_x=0.4)
+        middle_panel.add_widget(Label(text="Character Details", size_hint_y=0.05))
+        self.detail_text = TextInput(text="", readonly=True)
+        middle_panel.add_widget(self.detail_text)
+        
+        # Action buttons
+        action_buttons = BoxLayout(size_hint_y=0.15)
+        action_buttons.add_widget(Button(text="Add to Encounter", on_press=self.add_to_encounter))
+        action_buttons.add_widget(Button(text="Heal/Damage", on_press=self.heal_damage))
+        action_buttons.add_widget(Button(text="Short Rest", on_press=self.short_rest_dialog))
+        action_buttons.add_widget(Button(text="Long Rest", on_press=self.long_rest))
+        middle_panel.add_widget(action_buttons)
+        
+        content.add_widget(middle_panel)
+        
+        # Right panel - Encounters (only in Expanded mode)
+        self.right_panel = BoxLayout(orientation='vertical', size_hint_x=0.3)
+        self.right_panel.add_widget(Label(text="Encounters", size_hint_y=0.05))
+        
+        # Encounter list
+        enc_scroll = ScrollView()
+        self.enc_list_layout = BoxLayout(orientation='vertical', size_hint_y=None)
+        self.enc_list_layout.bind(minimum_height=self.enc_list_layout.setter('height'))
+        enc_scroll.add_widget(self.enc_list_layout)
+        self.right_panel.add_widget(enc_scroll)
+        
+        # Encounter buttons
+        enc_buttons = BoxLayout(size_hint_y=0.15)
+        self.new_enc_btn = Button(text="New Enc", on_press=self.new_encounter)
+        self.delete_enc_btn = Button(text="Delete Enc", on_press=self.delete_encounter)
+        self.start_enc_btn = Button(text="Start Enc", on_press=self.start_encounter)
+        self.open_enc_btn = Button(text="Open Enc", on_press=self.open_encounter_window)
+        enc_buttons.add_widget(self.new_enc_btn)
+        enc_buttons.add_widget(self.delete_enc_btn)
+        enc_buttons.add_widget(self.start_enc_btn)
+        enc_buttons.add_widget(self.open_enc_btn)
+        self.right_panel.add_widget(enc_buttons)
+        
+        content.add_widget(self.right_panel)
+        main_layout.add_widget(content)
+        
+        self.refresh_ui()
+        return main_layout
+
+    def refresh_ui(self):
+        self.refresh_char_list()
+        self.refresh_enc_list()
+        self.refresh_character_tabs()
+        self.apply_mode()
+
+    def refresh_char_list(self):
+        self.char_list_layout.clear_widgets()
+        for char_id, character in self.game.characters.items():
+            btn = Button(
+                text=f"{character.name} (HP {character.current_hp}/{character.max_hp})",
+                size_hint_y=None,
+                height=60
+            )
+            btn.char_id = char_id
+            btn.bind(on_press=self.on_char_select)
+            self.char_list_layout.add_widget(btn)
+
+    def refresh_enc_list(self):
+        self.enc_list_layout.clear_widgets()
+        for enc_id, encounter in self.game.encounters.items():
+            btn = Button(
+                text=f"{encounter.name} Round:{encounter.round} Combatants:{len(encounter.combatants)}",
+                size_hint_y=None,
+                height=60
+            )
+            btn.enc_id = enc_id
+            btn.bind(on_press=self.on_enc_select)
+            self.enc_list_layout.add_widget(btn)
+
+    def refresh_character_tabs(self):
+        self.char_tabs.clear_tabs()
+        for char_id, character in self.game.characters.items():
+            tab = CharacterTab(character, self)
+            self.char_tabs.add_widget(tab)
+
+    def on_char_select(self, instance):
+        self.selected_char_id = instance.char_id
+        self.show_character(self.selected_char_id)
+
+    def on_enc_select(self, instance):
+        self.selected_enc_id = instance.enc_id
+
+    def show_character(self, char_id):
+        character = self.game.characters.get(char_id)
+        if not character:
+            return
+        
+        details = []
+        details.append(f"Name: {character.name}")
+        details.append(f"Player: {character.player_name or 'N/A'}")
+        details.append(f"Level: {character.level}  XP: {character.xp}  Prof bonus: {character.prof_bonus()}")
+        details.append(f"Class/Race: {character.char_class} / {character.race}")
+        details.append(f"HP: {character.current_hp}/{character.max_hp}  Temp HP: {character.temp_hp}")
+        details.append(f"AC: {character.armor_class}  Speed: {character.speed}")
+        details.append("Abilities:")
+        for ability, score in character.abilities.items():
+            details.append(f"  {ability}: {score} (mod {ability_mod(score)})")
+        details.append("Conditions:")
+        if character.conditions:
+            for condition, rounds in character.conditions.items():
+                details.append(f"  {condition}: {rounds}")
+        else:
+            details.append("  None")
+        details.append("Inventory:")
+        if character.inventory:
+            for item in character.inventory:
+                details.append(f"  {item.name} x{item.quantity} {'(consumable)' if item.consumable else ''}")
+        else:
+            details.append("  None")
+        details.append("Spells:")
+        if character.spells:
+            for spell in character.spells:
+                details.append(f"  {spell.name} (L{spell.level})")
+        else:
+            details.append("  None")
+        details.append("Spell Slots:")
+        if character.spell_slots:
+            for level, slot in sorted(character.spell_slots.items()):
+                details.append(f"  Level {level}: {slot.get('current', 0)}/{slot.get('max', 0)}")
+        else:
+            details.append("  None")
+        
+        self.detail_text.text = "\n".join(details)
+
+    def toggle_mode(self, instance):
+        self.mode = "Player" if self.mode == "Expanded" else "Expanded"
+        self.apply_mode()
+
+    def apply_mode(self):
+        self.mode_label.text = f"Mode: {self.mode}"
+        
+        if self.mode == "Expanded":
+            self.right_panel.opacity = 1
+            self.right_panel.disabled = False
+            # Enable management buttons
+            for btn in [self.new_char_btn, self.edit_char_btn, self.delete_char_btn, 
+                       self.new_enc_btn, self.delete_enc_btn, self.start_enc_btn, self.open_enc_btn]:
+                btn.disabled = False
+        else:
+            self.right_panel.opacity = 0.3
+            self.right_panel.disabled = True
+            # Disable management buttons
+            for btn in [self.new_char_btn, self.edit_char_btn, self.delete_char_btn,
+                       self.new_enc_btn, self.delete_enc_btn, self.start_enc_btn, self.open_enc_btn]:
+                btn.disabled = True
+
+    def new_character(self, instance):
+        CharacterDialog(self).open()
+
+    def edit_character(self, instance):
+        if not self.selected_char_id:
+            MessagePopup("Info", "Select a character first").open()
+            return
+        character = self.game.characters[self.selected_char_id]
+        CharacterDialog(self, character).open()
+
+    def on_character_dialog_result(self, character):
+        if character.char_id in self.game.characters:
+            # Update existing
+            self.game.characters[character.char_id] = character
+        else:
+            # Add new
+            self.game.add_character(character)
+        self.refresh_ui()
+
+    def delete_character(self, instance):
+        if not self.selected_char_id:
+            MessagePopup("Info", "Select a character first").open()
+            return
+        
+        def confirm_delete(instance):
+            self.game.remove_character(self.selected_char_id)
+            self.selected_char_id = None
+            self.detail_text.text = ""
+            self.refresh_ui()
+        
+        popup = Popup(title="Confirm Delete", size_hint=(0.6, 0.3))
+        content = BoxLayout(orientation='vertical')
+        content.add_widget(Label(text="Delete this character?"))
+        btn_layout = BoxLayout(size_hint_y=0.4)
+        yes_btn = Button(text="Yes")
+        yes_btn.bind(on_press=confirm_delete)
+        no_btn = Button(text="No")
+        no_btn.bind(on_press=popup.dismiss)
+        btn_layout.add_widget(yes_btn)
+        btn_layout.add_widget(no_btn)
+        content.add_widget(btn_layout)
+        popup.add_widget(content)
+        popup.open()
+
+    def new_encounter(self, instance):
+        def create_encounter(name):
+            if name:
+                self.game.create_encounter(name)
+                self.refresh_enc_list()
+        
+        InputPopup("New Encounter", "Enter encounter name:", create_encounter).open()
+
+    def delete_encounter(self, instance):
+        if not self.selected_enc_id:
+            MessagePopup("Info", "Select an encounter first").open()
+            return
+        
+        def confirm_delete(instance):
+            self.game.encounters.pop(self.selected_enc_id, None)
+            self.selected_enc_id = None
+            self.refresh_enc_list()
+        
+        popup = Popup(title="Confirm Delete", size_hint=(0.6, 0.3))
+        content = BoxLayout(orientation='vertical')
+        content.add_widget(Label(text="Delete this encounter?"))
+        btn_layout = BoxLayout(size_hint_y=0.4)
+        yes_btn = Button(text="Yes")
+        yes_btn.bind(on_press=confirm_delete)
+        no_btn = Button(text="No")
+        no_btn.bind(on_press=popup.dismiss)
+        btn_layout.add_widget(yes_btn)
+        btn_layout.add_widget(no_btn)
+        content.add_widget(btn_layout)
+        popup.add_widget(content)
+        popup.open()
+
+    def add_to_encounter(self, instance):
+        if not self.selected_enc_id:
+            MessagePopup("Info", "Select an encounter first").open()
+            return
+        if not self.selected_char_id:
+            MessagePopup("Info", "Select a character first").open()
+            return
+        
+        try:
+            self.game.add_to_encounter(self.selected_enc_id, self.selected_char_id)
+            MessagePopup("Success", "Character added to encounter").open()
+            self.refresh_enc_list()
+        except Exception as e:
+            MessagePopup("Error", str(e)).open()
+
+    def start_encounter(self, instance):
+        if not self.selected_enc_id:
+            MessagePopup("Info", "Select an encounter first").open()
+            return
+        
+        encounter = self.game.encounters.get(self.selected_enc_id)
+        if not encounter:
+            MessagePopup("Error", "Encounter not found").open()
+            return
+        
+        if not encounter.combatants:
+            MessagePopup("Info", "No combatants in encounter").open()
+            return
+        
+        # Roll initiatives
+        initiatives = {}
+        for combatant in encounter.combatants:
+            default = combatant.character.ability_mod("DEX") + random.randint(1, 20)
+            initiatives[combatant.character.char_id] = default
+        
+        encounter.start(initiatives)
+        MessagePopup("Started", f"Encounter '{encounter.name}' started (Round {encounter.round})").open()
+        self.refresh_enc_list()
+        self.open_encounter_window(None)
+
+    def open_encounter_window(self, instance):
+        if not self.selected_enc_id:
+            MessagePopup("Info", "Select an encounter first").open()
+            return
+        
+        encounter = self.game.encounters.get(self.selected_enc_id)
+        if not encounter:
+            MessagePopup("Error", "Encounter not found").open()
+            return
+        
+        EncounterWindow(encounter, self).open()
+
+    def heal_damage(self, instance):
+        if not self.selected_char_id:
+            MessagePopup("Info", "Select a character first").open()
+            return
+        
+        character = self.game.characters.get(self.selected_char_id)
+        if not character:
+            MessagePopup("Error", "Character not found").open()
+            return
+        
+        def apply_heal_damage(amount):
+            try:
+                amount = int(amount)
+                if amount >= 0:
+                    character.heal(amount)
+                else:
+                    character.apply_damage(-amount)
+                self.show_character(self.selected_char_id)
+                self.refresh_char_list()
+                self.refresh_character_tabs()
+            except ValueError:
+                MessagePopup("Error", "Invalid amount").open()
+        
+        NumericInputPopup("Heal/Damage", "Positive to heal, negative to damage:", apply_heal_damage).open()
+
+    def short_rest_dialog(self, instance):
+        if not self.selected_char_id:
+            MessagePopup("Info", "Select a character first").open()
+            return
+        
+        character = self.game.characters.get(self.selected_char_id)
+        if not character:
+            MessagePopup("Error", "Character not found").open()
+            return
+        
+        def apply_short_rest(rolls_text):
+            try:
+                rolls = [int(x.strip()) for x in rolls_text.split(",") if x.strip()]
+                character.short_rest(rolls)
+                self.show_character(self.selected_char_id)
+                self.refresh_char_list()
+                self.refresh_character_tabs()
+            except ValueError:
+                MessagePopup("Error", "Invalid rolls format").open()
+        
+        InputPopup("Short Rest", "Enter comma-separated hit die rolls (e.g., 4,5):", apply_short_rest).open()
+
+    def long_rest(self, instance):
+        if not self.selected_char_id:
+            MessagePopup("Info", "Select a character first").open()
+            return
+        
+        character = self.game.characters.get(self.selected_char_id)
+        if not character:
+            MessagePopup("Error", "Character not found").open()
+            return
+        
+        character.long_rest()
+        self.show_character(self.selected_char_id)
+        self.refresh_char_list()
+        self.refresh_character_tabs()
+        MessagePopup("Long Rest", "Character has completed a long rest").open()
+
+    def save_game(self, instance):
+        def save_callback(filename):
+            if filename:
+                path = filename if os.path.isabs(filename) else os.path.join(self._base_dir, filename)
+                try:
+                    self.game.save(path)
+                    MessagePopup("Saved", f"Game saved to {path}").open()
+                except Exception as e:
+                    MessagePopup("Error", f"Save failed: {str(e)}").open()
+        
+        InputPopup("Save Game", "Enter filename:", save_callback, text="game_save.json").open()
+
+    def load_game(self, instance):
+        def load_callback(filename):
+            if filename:
+                path = filename if os.path.isabs(filename) else os.path.join(self._base_dir, filename)
+                if not os.path.exists(path):
+                    MessagePopup("Error", f"File not found: {path}").open()
+                    return
+                
+                try:
+                    self.game = Game.load(path)
+                    self.selected_char_id = None
+                    self.selected_enc_id = None
+                    self.detail_text.text = ""
+                    self.refresh_ui()
+                    MessagePopup("Loaded", f"Game loaded from {path}").open()
+                except Exception as e:
+                    MessagePopup("Error", f"Load failed: {str(e)}").open()
+        
+        InputPopup("Load Game", "Enter filename:", load_callback, text="game_save.json").open()
+
+    def open_dice_roller(self, instance):
+        DiceRollerPopup().open()
+
+    def exit_app(self, instance):
+        self.stop()
 
 if __name__ == "__main__":
-    # Ensure tkinter import name exists (some versions imported ttk/messagebox earlier)
-    try:
-        app = DnDApp()
-        app.mainloop()
-    except Exception as exc:
-        # Minimal reporting to stderr; avoid crashing silently during development
-        import traceback, sys
-        traceback.print_exc(file=sys.stderr)
-        raise
+    DnDManagerApp().run()
